@@ -1,0 +1,40 @@
+name: ping
+
+# Keeps the Fly trial machine awake.
+#
+# Why: the trial account stops the machine 5 minutes after it starts, but any
+# inbound HTTP request on /healthz starts it again (auto_start_machines = true
+# in fly.toml). GitHub cron is often late, therefore one run does several pings
+# in a row instead of a single one.
+#
+# This repository is public on purpose: Actions minutes are free for public
+# repos, so a 5-minute schedule costs nothing.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ping
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Ping /healthz until the next scheduled run
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -m 40 -o /tmp/healthz.json -w '%{http_code}' \
+              https://telegram-sarcasm-bot.fly.dev/healthz || echo "000")
+            echo "$(date -u +%FT%TZ) ping $i -> HTTP $code"
+            cat /tmp/healthz.json 2>/dev/null || true
+            echo
+            if [ "$i" != "5" ]; then sleep 55; fi
+          done
+          echo "done"
